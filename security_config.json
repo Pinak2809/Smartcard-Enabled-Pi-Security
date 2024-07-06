@@ -1,0 +1,12 @@
+{
+    "uid_block": 0,
+    "key_a": [
+        255,
+        255,
+        255,
+        255,
+        255,
+        255
+    ],
+    "log_file": "access_log.txt"
+}

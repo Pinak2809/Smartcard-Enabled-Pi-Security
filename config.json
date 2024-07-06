@@ -1,0 +1,12 @@
+{
+    "balance_block": 4,
+    "key_a": [
+        255,
+        255,
+        255,
+        255,
+        255,
+        255
+    ],
+    "log_file": "transaction_log.txt"
+}
