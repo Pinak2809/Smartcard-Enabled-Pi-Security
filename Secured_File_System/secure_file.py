@@ -2,10 +2,10 @@ import os
 import json
 import logging
 import time
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa, padding as asymmetric_padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding as symmetric_padding
 from cryptography.hazmat.backends import default_backend
 from smartcard.System import readers
 from smartcard.util import toHexString
@@ -159,6 +159,9 @@ class SecureFileSystem:
         self.save_users()
         print(f"User {name} registered successfully.")
 
+    def generate_key(self):
+        return os.urandom(32)  # 256-bit key for AES
+
     def encrypt_file(self, uid, filename):
         if not self.authenticate_user(uid):
             return
@@ -171,21 +174,36 @@ class SecureFileSystem:
         with open(file_path, 'rb') as file:
             data = file.read()
 
+        # Generate a random symmetric key
+        symmetric_key = self.generate_key()
+
+        # Encrypt the file data with AES
+        iv = os.urandom(16)
+        cipher = Cipher(algorithms.AES(symmetric_key), modes.CBC(iv), backend=default_backend())
+        encryptor = cipher.encryptor()
+        padder = symmetric_padding.PKCS7(128).padder()
+        padded_data = padder.update(data) + padder.finalize()
+        encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
+
+        # Encrypt the symmetric key with RSA
         public_key = serialization.load_pem_public_key(
             self.users[uid]['public_key'].encode('utf-8'),
             backend=default_backend()
         )
-
-        encrypted_data = public_key.encrypt(
-            data,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+        encrypted_symmetric_key = public_key.encrypt(
+            symmetric_key,
+            asymmetric_padding.OAEP(
+                mgf=asymmetric_padding.MGF1(algorithm=hashes.SHA256()),
                 algorithm=hashes.SHA256(),
                 label=None
             )
         )
 
+        # Write the encrypted data and key to file
         with open(file_path + '.encrypted', 'wb') as file:
+            file.write(len(encrypted_symmetric_key).to_bytes(4, byteorder='big'))
+            file.write(encrypted_symmetric_key)
+            file.write(iv)
             file.write(encrypted_data)
 
         os.remove(file_path)
@@ -201,6 +219,9 @@ class SecureFileSystem:
             return
 
         with open(file_path, 'rb') as file:
+            key_size = int.from_bytes(file.read(4), byteorder='big')
+            encrypted_symmetric_key = file.read(key_size)
+            iv = file.read(16)
             encrypted_data = file.read()
 
         private_key = serialization.load_pem_private_key(
@@ -209,20 +230,38 @@ class SecureFileSystem:
             backend=default_backend()
         )
 
-        decrypted_data = private_key.decrypt(
-            encrypted_data,
-            padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA256()),
+        # Decrypt the symmetric key
+        symmetric_key = private_key.decrypt(
+            encrypted_symmetric_key,
+            asymmetric_padding.OAEP(
+                mgf=asymmetric_padding.MGF1(algorithm=hashes.SHA256()),
                 algorithm=hashes.SHA256(),
                 label=None
             )
         )
+
+        # Decrypt the file data
+        cipher = Cipher(algorithms.AES(symmetric_key), modes.CBC(iv), backend=default_backend())
+        decryptor = cipher.decryptor()
+        unpadder = symmetric_padding.PKCS7(128).unpadder()
+        decrypted_padded_data = decryptor.update(encrypted_data) + decryptor.finalize()
+        decrypted_data = unpadder.update(decrypted_padded_data) + unpadder.finalize()
 
         with open(os.path.join(self.secure_folder, filename), 'wb') as file:
             file.write(decrypted_data)
 
         os.remove(file_path)
         print(f"File {filename} decrypted successfully.")
+
+    def close(self):
+        if self.connection:
+            try:
+                self.connection.disconnect()
+                self.logger.info("Connection closed.")
+            except CardConnectionException:
+                self.logger.info("No card to disconnect.")
+            except Exception as e:
+                self.logger.error(f"Error closing connection: {e}")
 
 def main():
     secure_fs = SecureFileSystem()
@@ -255,8 +294,7 @@ def main():
         except KeyboardInterrupt:
             print("\nProgram terminated by user.")
         finally:
-            if secure_fs.connection:
-                secure_fs.connection.disconnect()
+            secure_fs.close()
 
 if __name__ == "__main__":
     main()
