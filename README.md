@@ -18,23 +18,23 @@ This project implements a comprehensive security system using smartcards for emb
 
 1. Clone this repository:
 2. Install required packages:
-   logging (standard library)
-   json (standard library)
-   time (standard library)
-   struct (standard library)
-   os (standard library)
-   contextlib (standard library)
-   smartcard (from pyscard library)
-     System
-     util
-     Exceptions (CardConnectionException, NoCardException)  
-   cryptography  
-     hazmat.primitives.hashes
-     hazmat.primitives.asymmetric.rsa
-     hazmat.primitives.asymmetric.padding
-     hazmat.primitives.serialization
-     hazmat.primitives.ciphers
-     hazmat.backends
+   -logging (standard library)
+   -json (standard library)
+   -time (standard library)
+   -struct (standard library)
+   -os (standard library)
+   -contextlib (standard library)
+   -smartcard (from pyscard library)
+     --System
+     --util
+     --Exceptions (CardConnectionException, NoCardException)  
+   -cryptography  
+     --hazmat.primitives.hashes
+     --hazmat.primitives.asymmetric.rsa
+     --hazmat.primitives.asymmetric.padding
+     --hazmat.primitives.serialization
+     --hazmat.primitives.ciphers
+     --hazmat.backends
 
 ## Usage
 
